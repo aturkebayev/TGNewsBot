@@ -10,6 +10,7 @@ from loguru import logger
 from db.database import init_db, close_db
 from bot.handlers import router
 from scheduler.jobs import setup_scheduler
+from parser.rss import poll_all_sources
 
 load_dotenv()
 
@@ -38,6 +39,9 @@ async def main() -> None:
     scheduler = setup_scheduler(bot, timezone=TIMEZONE)
     scheduler.start()
     logger.info("Scheduler started")
+
+    logger.info("Initial RSS poll…")
+    asyncio.create_task(poll_all_sources())
 
     try:
         logger.info("Bot starting (long-polling)")

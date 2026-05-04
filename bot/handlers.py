@@ -9,6 +9,7 @@ from db.database import (
     get_subscriptions, add_subscription, remove_subscription,
     get_recent_articles,
 )
+from parser.rss import poll_all_sources
 from bot.keyboards import topics_keyboard, settings_keyboard
 from bot.formatter import format_article, format_digest_header
 
@@ -92,10 +93,22 @@ async def cmd_help(message: Message) -> None:
         "/start — начать работу\n"
         "/topics — выбрать темы новостей\n"
         "/news — получить свежие новости\n"
+        "/fetch — загрузить новости прямо сейчас\n"
         "/settings — время дайджеста\n"
         "/help — эта справка"
     )
     await message.answer(text, parse_mode="MarkdownV2")
+
+
+@router.message(Command("fetch"))
+async def cmd_fetch(message: Message) -> None:
+    await upsert_user(message.chat.id)
+    msg = await message.answer("⏳ Загружаю новости, подожди…")
+    try:
+        count = await poll_all_sources()
+        await msg.edit_text(f"✅ Готово\\! Загружено новых статей: *{count}*", parse_mode="MarkdownV2")
+    except Exception as exc:
+        await msg.edit_text(f"❌ Ошибка: {exc}")
 
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
