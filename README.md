@@ -16,30 +16,46 @@ No paid APIs required — only a Telegram Bot Token.
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.11+ — https://www.python.org/downloads/
 - Telegram Bot Token from [@BotFather](https://t.me/BotFather)
+- Git — https://git-scm.com/download/win
+- (optional) Docker Desktop — https://www.docker.com/products/docker-desktop/
 
-## Quick start
+## Quick start (PowerShell, Windows 11)
 
-```bash
+```powershell
 git clone https://github.com/aturkebayev/TGNewsBot.git
 cd TGNewsBot
 
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
 
-cp .env.example .env
-# Edit .env and fill in TELEGRAM_BOT_TOKEN
+Copy-Item .env.example .env
+notepad .env          # вставь TELEGRAM_BOT_TOKEN=<твой токен>
 
 python main.py
 ```
 
-## Docker
+> **Если `Activate.ps1` блокируется политикой выполнения:**
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
 
-```bash
-cp .env.example .env
-# Edit .env and fill in TELEGRAM_BOT_TOKEN
+## Docker (PowerShell)
+
+```powershell
+Copy-Item .env.example .env
+notepad .env          # вставь TELEGRAM_BOT_TOKEN=<твой токен>
 
 docker-compose up -d
+
+# Просмотр логов
+docker-compose logs -f
+
+# Остановка
+docker-compose down
 ```
 
 ## Bot commands
