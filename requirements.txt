@@ -1,1 +1,10 @@
-aiogram==3.x aiosqlite feedparser httpx deep-translator langdetect apscheduler loguru tenacity python-dotenv
+aiogram==3.7.0
+aiosqlite
+feedparser
+httpx
+deep-translator
+langdetect
+apscheduler
+loguru
+tenacity
+python-dotenv

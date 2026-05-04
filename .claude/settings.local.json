@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -3.11 -m py_compile bot/formatter.py bot/keyboards.py bot/handlers.py db/database.py processor/engine.py parser/rss.py scheduler/jobs.py main.py)",
+      "PowerShell(py -3.11 -m py_compile bot/formatter.py bot/keyboards.py bot/handlers.py db/database.py processor/engine.py parser/rss.py scheduler/jobs.py main.py)",
+      "PowerShell(if \\($?\\) { \"All OK\" } else { \"Errors found\" })",
+      "Bash(git add *)"
+    ]
+  }
+}
