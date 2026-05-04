@@ -1,4 +1,7 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton,
+)
 
 TOPICS = ["politics", "tech", "sport", "economy", "science", "all"]
 
@@ -12,6 +15,18 @@ TOPIC_LABELS = {
 }
 
 DIGEST_TIMES = ["09:00", "14:00", "19:00"]
+
+
+def main_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📰 Новости"), KeyboardButton(text="🔄 Обновить")],
+            [KeyboardButton(text="🗂 Темы"),    KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="❓ Помощь")],
+        ],
+        resize_keyboard=True,
+        persistent=True,
+    )
 
 
 def topics_keyboard(active: list[str]) -> InlineKeyboardMarkup:

@@ -18,6 +18,15 @@ def _strip_html(text: str) -> str:
     text = html.unescape(text)
     return " ".join(text.split())
 
+
+def _get_summary(entry) -> str:
+    # feedparser may put full HTML in entry.content list
+    content = getattr(entry, "content", None)
+    if content:
+        return _strip_html(content[0].get("value", "") or "")
+    raw = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+    return _strip_html(raw)
+
 RSS_SOURCES = {
     "BBC":           "https://feeds.bbci.co.uk/news/world/rss.xml",
     "Guardian":      "https://www.theguardian.com/world/rss",
@@ -57,7 +66,7 @@ async def _fetch_feed(client: httpx.AsyncClient, name: str, url: str) -> list[di
         if pub and pub < cutoff:
             continue
         title = _strip_html(getattr(entry, "title", "") or "")
-        summary = _strip_html(getattr(entry, "summary", "") or getattr(entry, "description", "") or "")
+        summary = _get_summary(entry)
         link = getattr(entry, "link", "") or ""
         if not link:
             continue
