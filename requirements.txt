@@ -1,0 +1,1 @@
+aiogram==3.x aiosqlite feedparser httpx deep-translator langdetect apscheduler loguru tenacity python-dotenv
