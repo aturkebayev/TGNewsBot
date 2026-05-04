@@ -9,11 +9,11 @@ from db.database import article_exists, insert_article
 from processor.engine import process_article
 
 RSS_SOURCES = {
-    "Reuters":    "http://feeds.reuters.com/reuters/topNews",
-    "BBC":        "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "AP News":    "https://feeds.apnews.com/rss/apf-topnews",
-    "Guardian":   "https://www.theguardian.com/world/rss",
-    "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
+    "BBC":           "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "Guardian":      "https://www.theguardian.com/world/rss",
+    "Al Jazeera":    "https://www.aljazeera.com/xml/rss/all.xml",
+    "NPR News":      "https://feeds.npr.org/1004/rss.xml",
+    "Deutsche Welle":"https://rss.dw.com/rdf/rss-en-all",
 }
 
 MAX_AGE_HOURS = 24

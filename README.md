@@ -102,10 +102,10 @@ TGNewsBot/
 
 ## RSS Sources (whitelisted)
 
-| Source     | Feed URL |
-|------------|----------|
-| Reuters    | http://feeds.reuters.com/reuters/topNews |
-| BBC        | http://feeds.bbci.co.uk/news/world/rss.xml |
-| AP News    | https://feeds.apnews.com/rss/apf-topnews |
-| Guardian   | https://www.theguardian.com/world/rss |
-| Al Jazeera | https://www.aljazeera.com/xml/rss/all.xml |
+| Source         | Feed URL |
+|----------------|----------|
+| BBC            | https://feeds.bbci.co.uk/news/world/rss.xml |
+| Guardian       | https://www.theguardian.com/world/rss |
+| Al Jazeera     | https://www.aljazeera.com/xml/rss/all.xml |
+| NPR News       | https://feeds.npr.org/1004/rss.xml |
+| Deutsche Welle | https://rss.dw.com/rdf/rss-en-all |
