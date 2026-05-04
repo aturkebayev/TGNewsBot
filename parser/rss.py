@@ -1,4 +1,6 @@
 import asyncio
+import html
+import re
 from datetime import datetime, timezone, timedelta
 
 import feedparser
@@ -7,6 +9,14 @@ from loguru import logger
 
 from db.database import article_exists, insert_article
 from processor.engine import process_article
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(text: str) -> str:
+    text = _TAG_RE.sub(" ", text)
+    text = html.unescape(text)
+    return " ".join(text.split())
 
 RSS_SOURCES = {
     "BBC":           "https://feeds.bbci.co.uk/news/world/rss.xml",
@@ -46,8 +56,8 @@ async def _fetch_feed(client: httpx.AsyncClient, name: str, url: str) -> list[di
         pub = _parse_date(entry)
         if pub and pub < cutoff:
             continue
-        title = getattr(entry, "title", "") or ""
-        summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+        title = _strip_html(getattr(entry, "title", "") or "")
+        summary = _strip_html(getattr(entry, "summary", "") or getattr(entry, "description", "") or "")
         link = getattr(entry, "link", "") or ""
         if not link:
             continue
