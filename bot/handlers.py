@@ -37,40 +37,51 @@ HELP_TEXT = (
 async def _send_news(message: Message) -> None:
     subs = await get_subscriptions(message.chat.id)
     if not subs:
-        await message.answer("Темы не выбраны. Нажми 🗂 Темы чтобы подписаться.")
+        await message.answer(
+            "Темы не выбраны. Нажми 🗂 Темы чтобы подписаться.",
+            reply_markup=main_menu(),
+        )
         return
 
     topics = subs if "all" not in subs else ["all"]
-    sent = False
+    all_articles: list = []
     for topic in topics:
         articles = await get_recent_articles(topic, hours=24, limit=5)
         if not articles:
             continue
         header = format_digest_header(topic, len(articles))
         await message.answer(header, parse_mode="MarkdownV2")
-        for art in articles:
+        for i, art in enumerate(articles):
+            is_last = (topic == topics[-1]) and (i == len(articles) - 1)
             try:
                 await message.answer(
                     format_article(art),
                     parse_mode="MarkdownV2",
                     disable_web_page_preview=True,
+                    reply_markup=main_menu() if is_last else None,
                 )
                 await asyncio.sleep(0.05)
             except Exception:
                 pass
-        sent = True
+        all_articles.extend(articles)
 
-    if not sent:
-        await message.answer("Нет свежих новостей за последние 24 часа. Нажми 🔄 Обновить.")
+    if not all_articles:
+        await message.answer(
+            "Нет свежих новостей за последние 24 часа. Нажми 🔄 Обновить.",
+            reply_markup=main_menu(),
+        )
 
 
 async def _do_fetch(message: Message) -> None:
     msg = await message.answer("⏳ Загружаю новости, подожди…")
     try:
         count = await poll_all_sources()
-        await msg.edit_text(f"✅ Готово! Загружено новых статей: {count}")
+        await msg.edit_text(
+            f"✅ Готово! Загружено новых статей: {count}",
+            reply_markup=main_menu(),
+        )
     except Exception as exc:
-        await msg.edit_text(f"❌ Ошибка: {exc}")
+        await msg.edit_text(f"❌ Ошибка: {exc}", reply_markup=main_menu())
 
 
 # ── commands ──────────────────────────────────────────────────────────────────
@@ -109,7 +120,7 @@ async def cmd_settings(message: Message) -> None:
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+    await message.answer(HELP_TEXT, reply_markup=main_menu())
 
 
 @router.message(Command("fetch"))
@@ -152,7 +163,7 @@ async def btn_settings(message: Message) -> None:
 
 @router.message(F.text == "❓ Помощь")
 async def btn_help(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+    await message.answer(HELP_TEXT, reply_markup=main_menu())
 
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────

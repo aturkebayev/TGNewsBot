@@ -25,7 +25,6 @@ def main_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="❓ Помощь")],
         ],
         resize_keyboard=True,
-        persistent=True,
     )
 
 
