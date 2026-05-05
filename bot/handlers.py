@@ -16,9 +16,19 @@ from parser.rss import poll_all_sources
 router = Router()
 
 WELCOME = (
-    "👋 *Привет\\!* Я бот мировых новостей на русском языке\\.\n\n"
-    "Выбери темы и получай дайджест в удобное время\\.\n\n"
-    "Используй кнопки меню внизу экрана\\."
+    "👋 Привет! Я бот мировых новостей на русском языке.\n\n"
+    "Выбери темы и получай дайджест в удобное время.\n\n"
+    "Используй кнопки меню внизу экрана."
+)
+
+HELP_TEXT = (
+    "📖 Команды бота:\n\n"
+    "📰 Новости — свежий дайджест\n"
+    "🔄 Обновить — загрузить RSS прямо сейчас\n"
+    "🗂 Темы — выбрать категории\n"
+    "⚙️ Настройки — время дайджеста (МСК)\n"
+    "❓ Помощь — эта справка\n\n"
+    "Или слэш-команды: /news /topics /settings /fetch /help"
 )
 
 
@@ -27,7 +37,7 @@ WELCOME = (
 async def _send_news(message: Message) -> None:
     subs = await get_subscriptions(message.chat.id)
     if not subs:
-        await message.answer("Ты ещё не выбрал(а) темы\\. Используй *Темы*", parse_mode="MarkdownV2")
+        await message.answer("Темы не выбраны. Нажми 🗂 Темы чтобы подписаться.")
         return
 
     topics = subs if "all" not in subs else ["all"]
@@ -41,7 +51,8 @@ async def _send_news(message: Message) -> None:
         for art in articles:
             try:
                 await message.answer(
-                    format_article(art), parse_mode="MarkdownV2",
+                    format_article(art),
+                    parse_mode="MarkdownV2",
                     disable_web_page_preview=True,
                 )
                 await asyncio.sleep(0.05)
@@ -50,7 +61,16 @@ async def _send_news(message: Message) -> None:
         sent = True
 
     if not sent:
-        await message.answer("Нет свежих новостей за последние 24 часа\\. Попробуй *Обновить*", parse_mode="MarkdownV2")
+        await message.answer("Нет свежих новостей за последние 24 часа. Нажми 🔄 Обновить.")
+
+
+async def _do_fetch(message: Message) -> None:
+    msg = await message.answer("⏳ Загружаю новости, подожди…")
+    try:
+        count = await poll_all_sources()
+        await msg.edit_text(f"✅ Готово! Загружено новых статей: {count}")
+    except Exception as exc:
+        await msg.edit_text(f"❌ Ошибка: {exc}")
 
 
 # ── commands ──────────────────────────────────────────────────────────────────
@@ -59,7 +79,7 @@ async def _send_news(message: Message) -> None:
 async def cmd_start(message: Message) -> None:
     await upsert_user(message.chat.id)
     subs = await get_subscriptions(message.chat.id)
-    await message.answer(WELCOME, parse_mode="MarkdownV2", reply_markup=main_menu())
+    await message.answer(WELCOME, reply_markup=main_menu())
     await message.answer("Выбери темы для подписки:", reply_markup=topics_keyboard(subs))
 
 
@@ -89,30 +109,13 @@ async def cmd_settings(message: Message) -> None:
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    text = (
-        "📖 *Команды бота:*\n\n"
-        "/start — начать работу\n"
-        "/topics — выбрать темы новостей\n"
-        "/news — получить свежие новости\n"
-        "/fetch — загрузить новости прямо сейчас\n"
-        "/settings — время дайджеста\n"
-        "/help — эта справка"
-    )
-    await message.answer(text, parse_mode="MarkdownV2")
+    await message.answer(HELP_TEXT)
 
 
 @router.message(Command("fetch"))
 async def cmd_fetch(message: Message) -> None:
     await upsert_user(message.chat.id)
-    msg = await message.answer("⏳ Загружаю новости, подожди…")
-    try:
-        count = await poll_all_sources()
-        await msg.edit_text(
-            f"✅ Готово\\! Загружено новых статей: *{count}*",
-            parse_mode="MarkdownV2",
-        )
-    except Exception as exc:
-        await msg.edit_text(f"❌ Ошибка: {exc}")
+    await _do_fetch(message)
 
 
 # ── reply keyboard buttons ────────────────────────────────────────────────────
@@ -126,15 +129,7 @@ async def btn_news(message: Message) -> None:
 @router.message(F.text == "🔄 Обновить")
 async def btn_fetch(message: Message) -> None:
     await upsert_user(message.chat.id)
-    msg = await message.answer("⏳ Загружаю новости, подожди…")
-    try:
-        count = await poll_all_sources()
-        await msg.edit_text(
-            f"✅ Готово\\! Загружено новых статей: *{count}*",
-            parse_mode="MarkdownV2",
-        )
-    except Exception as exc:
-        await msg.edit_text(f"❌ Ошибка: {exc}")
+    await _do_fetch(message)
 
 
 @router.message(F.text == "🗂 Темы")
@@ -157,15 +152,7 @@ async def btn_settings(message: Message) -> None:
 
 @router.message(F.text == "❓ Помощь")
 async def btn_help(message: Message) -> None:
-    text = (
-        "📖 *Команды бота:*\n\n"
-        "📰 Новости — свежий дайджест\n"
-        "🔄 Обновить — загрузить RSS прямо сейчас\n"
-        "🗂 Темы — выбрать категории\n"
-        "⚙️ Настройки — время дайджеста\n"
-        "❓ Помощь — эта справка"
-    )
-    await message.answer(text, parse_mode="MarkdownV2")
+    await message.answer(HELP_TEXT)
 
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
@@ -189,7 +176,7 @@ async def cb_topics_save(call: CallbackQuery) -> None:
     if subs:
         await call.message.edit_text(f"✅ Сохранено: {', '.join(subs)}")
     else:
-        await call.message.edit_text("⚠️ Нет активных подписок\\. Используй Темы", parse_mode="MarkdownV2")
+        await call.message.edit_text("⚠️ Нет активных подписок. Нажми 🗂 Темы")
     await call.answer("Сохранено!")
 
 
