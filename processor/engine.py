@@ -1,4 +1,5 @@
 import asyncio
+import re
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -40,9 +41,16 @@ BREAKING_KEYWORDS = [
 ]
 
 
+def _word_match(keyword: str, text: str) -> bool:
+    return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text))
+
+
 def categorize(text: str) -> str:
     tl = text.lower()
-    scores = {c: sum(1 for kw in kws if kw in tl) for c, kws in CATEGORY_KEYWORDS.items()}
+    scores = {
+        c: sum(1 for kw in kws if _word_match(kw, tl))
+        for c, kws in CATEGORY_KEYWORDS.items()
+    }
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else "other"
 
@@ -52,7 +60,7 @@ def score_importance(text: str, source: str) -> int:
     score = 5
     if source in ("Reuters", "AP News"):
         score += 2
-    score += min(sum(1 for kw in BREAKING_KEYWORDS if kw in tl), 3)
+    score += min(sum(1 for kw in BREAKING_KEYWORDS if _word_match(kw, tl)), 3)
     return min(score, 10)
 
 
