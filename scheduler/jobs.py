@@ -21,9 +21,18 @@ def setup_scheduler(bot, timezone: str = "Europe/Moscow") -> AsyncIOScheduler:
     _bot = bot
 
     scheduler = AsyncIOScheduler(timezone=timezone)
-    scheduler.add_job(job_rss_poll, "interval", minutes=30, id="rss_poll")
-    scheduler.add_job(job_breaking_check, "interval", minutes=30, id="breaking_check")
-    scheduler.add_job(job_digest_send, "cron", minute=0, id="digest_send")
+    scheduler.add_job(
+        job_rss_poll, "interval", minutes=30, id="rss_poll",
+        max_instances=1, coalesce=True, misfire_grace_time=600,
+    )
+    scheduler.add_job(
+        job_breaking_check, "interval", minutes=30, id="breaking_check",
+        max_instances=1, coalesce=True, misfire_grace_time=600,
+    )
+    scheduler.add_job(
+        job_digest_send, "cron", minute=0, id="digest_send",
+        max_instances=1, coalesce=True, misfire_grace_time=300,
+    )
     return scheduler
 
 

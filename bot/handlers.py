@@ -73,15 +73,15 @@ async def _send_news(message: Message) -> None:
 
 
 async def _do_fetch(message: Message) -> None:
+    # edit_text поддерживает только InlineKeyboardMarkup,
+    # поэтому сначала редактируем текст, потом шлём новое сообщение с меню
     msg = await message.answer("⏳ Загружаю новости, подожди…")
     try:
         count = await poll_all_sources()
-        await msg.edit_text(
-            f"✅ Готово! Загружено новых статей: {count}",
-            reply_markup=main_menu(),
-        )
+        await msg.edit_text(f"✅ Готово! Загружено новых статей: {count}")
     except Exception as exc:
-        await msg.edit_text(f"❌ Ошибка: {exc}", reply_markup=main_menu())
+        await msg.edit_text(f"❌ Ошибка: {exc}")
+    await message.answer("Выбери действие:", reply_markup=main_menu())
 
 
 # ── commands ──────────────────────────────────────────────────────────────────
