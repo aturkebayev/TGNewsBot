@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery
 from db.database import (
     upsert_user, get_user, set_digest_time,
     get_subscriptions, add_subscription, remove_subscription,
-    get_recent_articles,
+    get_recent_articles, mark_articles_viewed,
 )
 from bot.keyboards import topics_keyboard, settings_keyboard, main_menu
 from bot.formatter import format_article, format_digest_header
@@ -35,7 +35,8 @@ HELP_TEXT = (
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 async def _send_news(message: Message) -> None:
-    subs = await get_subscriptions(message.chat.id)
+    user_id = message.chat.id
+    subs = await get_subscriptions(user_id)
     if not subs:
         await message.answer(
             "Темы не выбраны. Нажми 🗂 Темы чтобы подписаться.",
@@ -44,32 +45,38 @@ async def _send_news(message: Message) -> None:
         return
 
     topics = subs if "all" not in subs else ["all"]
-    all_articles: list = []
+    sent_ids: list[int] = []
+
     for topic in topics:
-        articles = await get_recent_articles(topic, hours=24, limit=5)
+        articles = await get_recent_articles(
+            topic, hours=24, limit=5, exclude_user_id=user_id
+        )
         if not articles:
             continue
         header = format_digest_header(topic, len(articles))
         await message.answer(header, parse_mode="MarkdownV2")
-        for i, art in enumerate(articles):
-            is_last = (topic == topics[-1]) and (i == len(articles) - 1)
+        for art in articles:
             try:
                 await message.answer(
                     format_article(art),
                     parse_mode="MarkdownV2",
                     disable_web_page_preview=True,
-                    reply_markup=main_menu() if is_last else None,
                 )
+                sent_ids.append(art["id"])
                 await asyncio.sleep(0.05)
             except Exception:
                 pass
-        all_articles.extend(articles)
 
-    if not all_articles:
+    # помечаем всё показанное как прочитанное одним запросом
+    await mark_articles_viewed(user_id, sent_ids)
+
+    if not sent_ids:
         await message.answer(
-            "Нет свежих новостей за последние 24 часа. Нажми 🔄 Обновить.",
+            "Нет новых новостей. Все свежие статьи уже показаны. Нажми 🔄 Обновить.",
             reply_markup=main_menu(),
         )
+    else:
+        await message.answer("Всё прочитано ✅", reply_markup=main_menu())
 
 
 async def _do_fetch(message: Message) -> None:

@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 )
 """
 
+CREATE_VIEWED = """
+CREATE TABLE IF NOT EXISTS user_article_views (
+    user_id INTEGER,
+    article_id INTEGER,
+    viewed_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, article_id)
+)
+"""
+
 _conn: aiosqlite.Connection | None = None
 
 
@@ -53,6 +62,7 @@ async def init_db() -> None:
     await conn.execute(CREATE_ARTICLES)
     await conn.execute(CREATE_USERS)
     await conn.execute(CREATE_SUBSCRIPTIONS)
+    await conn.execute(CREATE_VIEWED)
     await conn.commit()
     logger.info("Database initialized")
 
@@ -90,25 +100,56 @@ async def insert_article(article: dict) -> None:
     await conn.commit()
 
 
-async def get_recent_articles(topic: str, hours: int = 24, limit: int = 5) -> list:
+async def get_recent_articles(
+    topic: str,
+    hours: int = 24,
+    limit: int = 5,
+    exclude_user_id: int | None = None,
+) -> list:
     conn = await get_conn()
-    query = """
-        SELECT * FROM articles
-        WHERE processed_at >= datetime('now', ?)
-        {where_cat}
-        ORDER BY importance DESC, published_at DESC
-        LIMIT ?
-    """
-    params: list = [f"-{hours} hours"]
-    if topic != "all":
-        query = query.replace("{where_cat}", "AND category=?")
-        params.append(topic)
-    else:
-        query = query.replace("{where_cat}", "")
-    params.append(limit)
 
+    cat_filter = ""
+    params: list = [f"-{hours} hours"]
+
+    if topic != "all":
+        cat_filter = "AND a.category=?"
+        params.append(topic)
+
+    if exclude_user_id is not None:
+        query = f"""
+            SELECT a.* FROM articles a
+            WHERE a.processed_at >= datetime('now', ?)
+            {cat_filter}
+            AND a.id NOT IN (
+                SELECT article_id FROM user_article_views WHERE user_id=?
+            )
+            ORDER BY a.importance DESC, a.published_at DESC
+            LIMIT ?
+        """
+        params.append(exclude_user_id)
+    else:
+        query = f"""
+            SELECT * FROM articles a
+            WHERE a.processed_at >= datetime('now', ?)
+            {cat_filter}
+            ORDER BY a.importance DESC, a.published_at DESC
+            LIMIT ?
+        """
+
+    params.append(limit)
     async with conn.execute(query, params) as cur:
         return await cur.fetchall()
+
+
+async def mark_articles_viewed(user_id: int, article_ids: list[int]) -> None:
+    if not article_ids:
+        return
+    conn = await get_conn()
+    await conn.executemany(
+        "INSERT OR IGNORE INTO user_article_views (user_id, article_id) VALUES (?, ?)",
+        [(user_id, aid) for aid in article_ids],
+    )
+    await conn.commit()
 
 
 async def get_unsent_breaking() -> list:

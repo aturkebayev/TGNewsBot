@@ -8,7 +8,7 @@ from db.database import (
     get_all_users, get_users_by_digest_time,
     get_subscriptions, get_recent_articles,
     get_unsent_breaking, mark_breaking_sent,
-    get_users_subscribed_to,
+    get_users_subscribed_to, mark_articles_viewed,
 )
 from bot.formatter import format_article, format_digest_header
 from parser.rss import poll_all_sources
@@ -63,6 +63,7 @@ async def job_breaking_check() -> None:
                     parse_mode="MarkdownV2",
                     disable_web_page_preview=True,
                 )
+                await mark_articles_viewed(user["chat_id"], [art["id"]])
                 await asyncio.sleep(0.05)
             except Exception as exc:
                 logger.warning(f"Breaking send failed to {user['chat_id']}: {exc}")
@@ -78,30 +79,34 @@ async def job_digest_send() -> None:
         return
     logger.info(f"Scheduler: digest for {len(users)} user(s) at {now_msk}")
     for user in users:
-        subs = await get_subscriptions(user["chat_id"])
+        uid = user["chat_id"]
+        subs = await get_subscriptions(uid)
         if not subs:
             continue
         topics = subs if "all" not in subs else ["all"]
         for topic in topics:
-            articles = await get_recent_articles(topic, hours=24, limit=5)
+            articles = await get_recent_articles(
+                topic, hours=24, limit=5, exclude_user_id=uid
+            )
             if not articles:
                 continue
             header = format_digest_header(topic, len(articles))
             try:
-                await _bot.send_message(
-                    user["chat_id"], header, parse_mode="MarkdownV2"
-                )
+                await _bot.send_message(uid, header, parse_mode="MarkdownV2")
             except Exception as exc:
                 logger.warning(f"Digest header failed: {exc}")
                 continue
+            sent_ids: list[int] = []
             for art in articles:
                 try:
                     await _bot.send_message(
-                        user["chat_id"],
+                        uid,
                         format_article(art),
                         parse_mode="MarkdownV2",
                         disable_web_page_preview=True,
                     )
+                    sent_ids.append(art["id"])
                     await asyncio.sleep(0.05)
                 except Exception as exc:
                     logger.warning(f"Digest article failed: {exc}")
+            await mark_articles_viewed(uid, sent_ids)
