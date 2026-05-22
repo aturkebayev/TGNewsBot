@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
 
 from db.database import (
-    upsert_user, get_user, set_digest_time,
+    upsert_user, get_user, set_digest_time, set_alert_threshold,
     get_subscriptions, add_subscription, remove_subscription,
     get_recent_articles, mark_articles_viewed,
 )
@@ -23,10 +23,10 @@ WELCOME = (
 
 HELP_TEXT = (
     "📖 Команды бота:\n\n"
-    "📰 Новости — свежий дайджест\n"
+    "📰 Новости — свежий дайджест (только новые)\n"
     "🔄 Обновить — загрузить RSS прямо сейчас\n"
     "🗂 Темы — выбрать категории\n"
-    "⚙️ Настройки — время дайджеста (МСК)\n"
+    "⚙️ Настройки — время дайджеста и порог уведомлений\n"
     "❓ Помощь — эта справка\n\n"
     "Или слэш-команды: /news /topics /settings /fetch /help"
 )
@@ -67,12 +67,12 @@ async def _send_news(message: Message) -> None:
             except Exception:
                 pass
 
-    # помечаем всё показанное как прочитанное одним запросом
     await mark_articles_viewed(user_id, sent_ids)
 
     if not sent_ids:
         await message.answer(
-            "Нет новых новостей. Все свежие статьи уже показаны. Нажми 🔄 Обновить.",
+            "Нет новых новостей. Все свежие статьи уже показаны.\n"
+            "Нажми 🔄 Обновить чтобы загрузить свежие.",
             reply_markup=main_menu(),
         )
     else:
@@ -80,8 +80,6 @@ async def _send_news(message: Message) -> None:
 
 
 async def _do_fetch(message: Message) -> None:
-    # edit_text поддерживает только InlineKeyboardMarkup,
-    # поэтому сначала редактируем текст, потом шлём новое сообщение с меню
     msg = await message.answer("⏳ Загружаю новости, подожди…")
     try:
         count = await poll_all_sources()
@@ -118,10 +116,14 @@ async def cmd_news(message: Message) -> None:
 async def cmd_settings(message: Message) -> None:
     await upsert_user(message.chat.id)
     user = await get_user(message.chat.id)
-    current = user["digest_time"] if user else "09:00"
+    current_time = user["digest_time"] if user else "09:00"
+    current_thr = user["alert_threshold"] if user else 8
     await message.answer(
-        "⏰ Выбери время ежедневного дайджеста (МСК):",
-        reply_markup=settings_keyboard(current),
+        "⚙️ Настройки:\n\n"
+        "🕐 *Время дайджеста* — раз в сутки в выбранное время\n"
+        "🔔 *Порог уведомлений* — при каком importance слать push прямо сейчас",
+        parse_mode="Markdown",
+        reply_markup=settings_keyboard(current_time, current_thr),
     )
 
 
@@ -161,10 +163,14 @@ async def btn_topics(message: Message) -> None:
 async def btn_settings(message: Message) -> None:
     await upsert_user(message.chat.id)
     user = await get_user(message.chat.id)
-    current = user["digest_time"] if user else "09:00"
+    current_time = user["digest_time"] if user else "09:00"
+    current_thr = user["alert_threshold"] if user else 8
     await message.answer(
-        "⏰ Выбери время ежедневного дайджеста (МСК):",
-        reply_markup=settings_keyboard(current),
+        "⚙️ Настройки:\n\n"
+        "🕐 *Время дайджеста* — раз в сутки в выбранное время\n"
+        "🔔 *Порог уведомлений* — при каком importance слать push прямо сейчас",
+        parse_mode="Markdown",
+        reply_markup=settings_keyboard(current_time, current_thr),
     )
 
 
@@ -202,5 +208,22 @@ async def cb_topics_save(call: CallbackQuery) -> None:
 async def cb_digest_time(call: CallbackQuery) -> None:
     time_str = call.data.split(":", 1)[1]
     await set_digest_time(call.from_user.id, time_str)
-    await call.message.edit_reply_markup(reply_markup=settings_keyboard(time_str))
-    await call.answer(f"Время дайджеста: {time_str} МСК")
+    user = await get_user(call.from_user.id)
+    current_thr = user["alert_threshold"] if user else 8
+    await call.message.edit_reply_markup(
+        reply_markup=settings_keyboard(time_str, current_thr)
+    )
+    await call.answer(f"✅ Дайджест в {time_str} МСК")
+
+
+@router.callback_query(F.data.startswith("alert_threshold:"))
+async def cb_alert_threshold(call: CallbackQuery) -> None:
+    threshold = int(call.data.split(":", 1)[1])
+    await set_alert_threshold(call.from_user.id, threshold)
+    user = await get_user(call.from_user.id)
+    current_time = user["digest_time"] if user else "09:00"
+    await call.message.edit_reply_markup(
+        reply_markup=settings_keyboard(current_time, threshold)
+    )
+    labels = {7: "Все заметные (7+)", 8: "Важные (8+)", 9: "Только срочные (9+)", 0: "отключены"}
+    await call.answer(f"🔔 Уведомления: {labels.get(threshold, str(threshold))}")

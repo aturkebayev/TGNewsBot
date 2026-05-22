@@ -3,7 +3,6 @@ import os
 import sys
 
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -15,12 +14,19 @@ from parser.rss import poll_all_sources
 load_dotenv()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
+TIMEZONE  = os.getenv("TIMEZONE", "Europe/Moscow")
+DATA_DIR  = os.getenv("DATA_DIR", ".")
+
+# logs go into DATA_DIR so they land on the persistent volume when hosted
+LOG_FILE = os.path.join(DATA_DIR, "logs", "bot.log")
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 logger.remove()
-logger.add(sys.stdout, level=LOG_LEVEL, colorize=True,
-           format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}")
-logger.add("logs/bot.log", level=LOG_LEVEL, rotation="10 MB",
+logger.add(
+    sys.stdout, level=LOG_LEVEL, colorize=True,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}",
+)
+logger.add(LOG_FILE, level=LOG_LEVEL, rotation="10 MB",
            format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 
 

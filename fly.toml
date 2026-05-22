@@ -1,0 +1,26 @@
+# Fly.io deployment — https://fly.io
+# Deploy: fly launch (first time) / fly deploy (updates)
+
+app = "tgnewsbot"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LOG_LEVEL  = "INFO"
+  TIMEZONE   = "Europe/Moscow"
+  DATA_DIR   = "/data"
+
+# Persistent volume: SQLite DB + logs survive redeploys
+[mounts]
+  source      = "tgnewsbot_data"
+  destination = "/data"
+
+# Background worker — no HTTP port needed
+[processes]
+  app = "python main.py"
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "256mb"

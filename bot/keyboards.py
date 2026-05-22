@@ -16,6 +16,13 @@ TOPIC_LABELS = {
 
 DIGEST_TIMES = ["09:00", "14:00", "19:00"]
 
+ALERT_THRESHOLDS = {
+    7: "🔔 Все заметные (7+)",
+    8: "🔔 Важные (8+)",
+    9: "🚨 Только срочные (9+)",
+    0: "🔕 Отключить",
+}
+
 
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -45,14 +52,21 @@ def topics_keyboard(active: list[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def settings_keyboard(current_time: str) -> InlineKeyboardMarkup:
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text=f"{'✅ ' if t == current_time else ''}{t} МСК",
-                callback_data=f"digest_time:{t}",
-            )
-            for t in DIGEST_TIMES
-        ]
+def settings_keyboard(current_time: str, current_threshold: int) -> InlineKeyboardMarkup:
+    # Row 1-3: digest time
+    time_row = [
+        InlineKeyboardButton(
+            text=f"{'✅ ' if t == current_time else ''}{t} МСК",
+            callback_data=f"digest_time:{t}",
+        )
+        for t in DIGEST_TIMES
     ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    # Row 4+: alert threshold
+    threshold_rows = [
+        [InlineKeyboardButton(
+            text=f"{'✅ ' if v == current_threshold else ''}{label}",
+            callback_data=f"alert_threshold:{v}",
+        )]
+        for v, label in ALERT_THRESHOLDS.items()
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[[*time_row], *threshold_rows])

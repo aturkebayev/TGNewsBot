@@ -4,7 +4,22 @@
       "Bash(py -3.11 -m py_compile bot/formatter.py bot/keyboards.py bot/handlers.py db/database.py processor/engine.py parser/rss.py scheduler/jobs.py main.py)",
       "PowerShell(py -3.11 -m py_compile bot/formatter.py bot/keyboards.py bot/handlers.py db/database.py processor/engine.py parser/rss.py scheduler/jobs.py main.py)",
       "PowerShell(if \\($?\\) { \"All OK\" } else { \"Errors found\" })",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'docs: replace bash commands with PowerShell \\(Windows 11\\) *)",
+      "Bash(git commit -m 'fix: put each requirement on its own line *)",
+      "Bash(xxd)",
+      "Bash(git commit -m 'fix: relax aiogram version pin for Python 3.14 compatibility *)",
+      "Bash(git commit -m 'fix: poll RSS on startup and add /fetch command *)",
+      "Bash(git commit -m 'fix: replace dead Reuters/AP RSS with BBC/Guardian/AlJazeera/NPR/DW *)",
+      "Bash(git commit -m 'fix: strip HTML tags and decode entities from RSS titles/summaries *)",
+      "Bash(git commit -m 'fix: remove MarkdownV2 from UI strings to prevent entity parse errors *)",
+      "Bash(git commit -m 'fix: attach main_menu\\(\\) to all bot responses so keyboard always shows *)",
+      "Bash(git commit -m 'fix: use word-boundary matching in categorize\\(\\) to prevent false positives *)",
+      "Bash(git commit -m 'fix: two console errors *)",
+      "Bash(git commit -m 'feat: track viewed articles per user to prevent duplicates *)"
     ]
   }
 }

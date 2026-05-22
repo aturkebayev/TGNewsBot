@@ -1,7 +1,9 @@
+import os
 import aiosqlite
 from loguru import logger
 
-DB_PATH = "news.db"
+DATA_DIR = os.getenv("DATA_DIR", ".")
+DB_PATH = os.path.join(DATA_DIR, "news.db")
 
 CREATE_ARTICLES = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -25,6 +27,7 @@ CREATE_USERS = """
 CREATE TABLE IF NOT EXISTS users (
     chat_id INTEGER PRIMARY KEY,
     digest_time TEXT DEFAULT '09:00',
+    alert_threshold INTEGER DEFAULT 8,
     created_at TEXT
 )
 """
@@ -52,6 +55,7 @@ _conn: aiosqlite.Connection | None = None
 async def get_conn() -> aiosqlite.Connection:
     global _conn
     if _conn is None:
+        os.makedirs(DATA_DIR, exist_ok=True)
         _conn = await aiosqlite.connect(DB_PATH)
         _conn.row_factory = aiosqlite.Row
     return _conn
@@ -63,6 +67,11 @@ async def init_db() -> None:
     await conn.execute(CREATE_USERS)
     await conn.execute(CREATE_SUBSCRIPTIONS)
     await conn.execute(CREATE_VIEWED)
+    # migrate: add alert_threshold if missing (existing DBs)
+    try:
+        await conn.execute("ALTER TABLE users ADD COLUMN alert_threshold INTEGER DEFAULT 8")
+    except Exception:
+        pass
     await conn.commit()
     logger.info("Database initialized")
 
@@ -105,21 +114,25 @@ async def get_recent_articles(
     hours: int = 24,
     limit: int = 5,
     exclude_user_id: int | None = None,
+    min_importance: int = 0,
 ) -> list:
     conn = await get_conn()
 
-    cat_filter = ""
+    cat_filter = "" if topic == "all" else "AND a.category=?"
+    imp_filter = "" if min_importance == 0 else "AND a.importance>=?"
     params: list = [f"-{hours} hours"]
 
     if topic != "all":
-        cat_filter = "AND a.category=?"
         params.append(topic)
+    if min_importance > 0:
+        params.append(min_importance)
 
     if exclude_user_id is not None:
         query = f"""
             SELECT a.* FROM articles a
             WHERE a.processed_at >= datetime('now', ?)
             {cat_filter}
+            {imp_filter}
             AND a.id NOT IN (
                 SELECT article_id FROM user_article_views WHERE user_id=?
             )
@@ -129,9 +142,10 @@ async def get_recent_articles(
         params.append(exclude_user_id)
     else:
         query = f"""
-            SELECT * FROM articles a
+            SELECT a.* FROM articles a
             WHERE a.processed_at >= datetime('now', ?)
             {cat_filter}
+            {imp_filter}
             ORDER BY a.importance DESC, a.published_at DESC
             LIMIT ?
         """
@@ -173,8 +187,8 @@ async def mark_breaking_sent(article_id: int) -> None:
 async def upsert_user(chat_id: int) -> None:
     conn = await get_conn()
     await conn.execute(
-        """INSERT OR IGNORE INTO users (chat_id, digest_time, created_at)
-           VALUES (?, '09:00', datetime('now'))""",
+        """INSERT OR IGNORE INTO users (chat_id, digest_time, alert_threshold, created_at)
+           VALUES (?, '09:00', 8, datetime('now'))""",
         (chat_id,),
     )
     await conn.commit()
@@ -190,6 +204,14 @@ async def set_digest_time(chat_id: int, time_str: str) -> None:
     conn = await get_conn()
     await conn.execute(
         "UPDATE users SET digest_time=? WHERE chat_id=?", (time_str, chat_id)
+    )
+    await conn.commit()
+
+
+async def set_alert_threshold(chat_id: int, threshold: int) -> None:
+    conn = await get_conn()
+    await conn.execute(
+        "UPDATE users SET alert_threshold=? WHERE chat_id=?", (threshold, chat_id)
     )
     await conn.commit()
 
@@ -244,4 +266,13 @@ async def get_users_subscribed_to(topic: str) -> list:
         WHERE s.topic=? OR s.topic='all'
     """
     async with conn.execute(query, (topic,)) as cur:
+        return await cur.fetchall()
+
+
+async def get_all_subscribed_users() -> list:
+    """Return all users that have at least one subscription."""
+    conn = await get_conn()
+    async with conn.execute(
+        "SELECT DISTINCT u.* FROM users u JOIN subscriptions s ON s.user_id=u.chat_id"
+    ) as cur:
         return await cur.fetchall()

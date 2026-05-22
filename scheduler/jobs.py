@@ -5,10 +5,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loguru import logger
 
 from db.database import (
-    get_all_users, get_users_by_digest_time,
+    get_users_by_digest_time,
     get_subscriptions, get_recent_articles,
     get_unsent_breaking, mark_breaking_sent,
     get_users_subscribed_to, mark_articles_viewed,
+    get_all_subscribed_users,
 )
 from bot.formatter import format_article, format_digest_header
 from parser.rss import poll_all_sources
@@ -32,6 +33,12 @@ def setup_scheduler(bot, timezone: str = "Europe/Moscow") -> AsyncIOScheduler:
     scheduler.add_job(
         job_digest_send, "cron", minute=0, id="digest_send",
         max_instances=1, coalesce=True, misfire_grace_time=300,
+    )
+    # Important news alert every 6 hours
+    scheduler.add_job(
+        job_important_alert, "cron", hour="6,12,18,0", minute=5,
+        id="important_alert",
+        max_instances=1, coalesce=True, misfire_grace_time=600,
     )
     return scheduler
 
@@ -57,6 +64,10 @@ async def job_breaking_check() -> None:
         users = await get_users_subscribed_to(category)
         text = format_article(art)
         for user in users:
+            # only send if user's alert_threshold allows it (breaking = importance 9+)
+            thr = user["alert_threshold"] if user["alert_threshold"] is not None else 8
+            if thr == 0:
+                continue
             try:
                 await _bot.send_message(
                     user["chat_id"], text,
@@ -110,3 +121,42 @@ async def job_digest_send() -> None:
                 except Exception as exc:
                     logger.warning(f"Digest article failed: {exc}")
             await mark_articles_viewed(uid, sent_ids)
+
+
+async def job_important_alert() -> None:
+    """Every 6 hours: push top-3 unread important articles to each subscriber."""
+    if _bot is None:
+        return
+    users = await get_all_subscribed_users()
+    if not users:
+        return
+    logger.info(f"Scheduler: important alert for {len(users)} user(s)")
+    for user in users:
+        uid = user["chat_id"]
+        thr = user["alert_threshold"] if user["alert_threshold"] is not None else 8
+        if thr == 0:
+            continue  # user disabled push alerts
+
+        subs = await get_subscriptions(uid)
+        topics = subs if "all" not in subs else ["all"]
+
+        sent_ids: list[int] = []
+        for topic in topics:
+            articles = await get_recent_articles(
+                topic, hours=6, limit=3,
+                exclude_user_id=uid,
+                min_importance=thr,
+            )
+            for art in articles:
+                try:
+                    await _bot.send_message(
+                        uid,
+                        format_article(art),
+                        parse_mode="MarkdownV2",
+                        disable_web_page_preview=True,
+                    )
+                    sent_ids.append(art["id"])
+                    await asyncio.sleep(0.05)
+                except Exception as exc:
+                    logger.warning(f"Important alert failed to {uid}: {exc}")
+        await mark_articles_viewed(uid, sent_ids)
