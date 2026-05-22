@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Secrets & local config
+.env
+
+# Runtime data
+news.db
+logs/
+*.db-shm
+*.db-wal
