@@ -9,10 +9,19 @@ from db.database import (
     get_subscriptions, get_recent_articles,
     get_unsent_breaking, mark_breaking_sent,
     get_users_subscribed_to, mark_articles_viewed,
-    get_all_subscribed_users,
+    get_all_subscribed_users, get_disabled_sources,
 )
 from bot.formatter import format_article, format_digest_header
-from parser.rss import poll_all_sources
+from parser.rss import poll_all_sources, ALL_RSS_SOURCES
+
+
+async def _get_enabled_sources(user_id: int) -> list[str] | None:
+    """Returns list of enabled sources, or None if all enabled."""
+    disabled = await get_disabled_sources(user_id)
+    if not disabled:
+        return None
+    all_src = list(ALL_RSS_SOURCES.keys())
+    return [s for s in all_src if s not in disabled]
 
 _bot = None
 
@@ -94,10 +103,12 @@ async def job_digest_send() -> None:
         subs = await get_subscriptions(uid)
         if not subs:
             continue
+        enabled_sources = await _get_enabled_sources(uid)
         topics = subs if "all" not in subs else ["all"]
         for topic in topics:
             articles = await get_recent_articles(
-                topic, hours=24, limit=5, exclude_user_id=uid
+                topic, hours=24, limit=5, exclude_user_id=uid,
+                enabled_sources=enabled_sources,
             )
             if not articles:
                 continue
@@ -138,6 +149,7 @@ async def job_important_alert() -> None:
             continue  # user disabled push alerts
 
         subs = await get_subscriptions(uid)
+        enabled_sources = await _get_enabled_sources(uid)
         topics = subs if "all" not in subs else ["all"]
 
         sent_ids: list[int] = []
@@ -146,6 +158,7 @@ async def job_important_alert() -> None:
                 topic, hours=6, limit=3,
                 exclude_user_id=uid,
                 min_importance=thr,
+                enabled_sources=enabled_sources,
             )
             for art in articles:
                 try:

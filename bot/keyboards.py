@@ -27,12 +27,24 @@ ALERT_THRESHOLDS = {
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📰 Новости"), KeyboardButton(text="🔄 Обновить")],
-            [KeyboardButton(text="🗂 Темы"),    KeyboardButton(text="⚙️ Настройки")],
-            [KeyboardButton(text="❓ Помощь")],
+            [KeyboardButton(text="📰 Новости"),   KeyboardButton(text="🔄 Обновить")],
+            [KeyboardButton(text="🗂 Темы"),       KeyboardButton(text="📡 Источники")],
+            [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="❓ Помощь")],
         ],
         resize_keyboard=True,
     )
+
+
+def sources_keyboard(all_sources: list[str], disabled: list[str]) -> InlineKeyboardMarkup:
+    buttons = []
+    for source in all_sources:
+        enabled = source not in disabled
+        buttons.append([InlineKeyboardButton(
+            text=f"{'✅' if enabled else '❌'} {source}",
+            callback_data=f"src:{source}",
+        )])
+    buttons.append([InlineKeyboardButton(text="💾 Сохранить", callback_data="src:save")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def topics_keyboard(active: list[str]) -> InlineKeyboardMarkup:

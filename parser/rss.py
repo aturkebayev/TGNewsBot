@@ -20,19 +20,24 @@ def _strip_html(text: str) -> str:
 
 
 def _get_summary(entry) -> str:
-    # feedparser may put full HTML in entry.content list
     content = getattr(entry, "content", None)
     if content:
         return _strip_html(content[0].get("value", "") or "")
     raw = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
     return _strip_html(raw)
 
-RSS_SOURCES = {
+
+# All available RSS sources (displayed in /sources menu)
+ALL_RSS_SOURCES: dict[str, str] = {
     "BBC":           "https://feeds.bbci.co.uk/news/world/rss.xml",
     "Guardian":      "https://www.theguardian.com/world/rss",
     "Al Jazeera":    "https://www.aljazeera.com/xml/rss/all.xml",
     "NPR News":      "https://feeds.npr.org/1004/rss.xml",
     "Deutsche Welle":"https://rss.dw.com/rdf/rss-en-all",
+    "France 24":     "https://www.france24.com/en/rss",
+    "The Independent":"https://www.independent.co.uk/news/world/rss",
+    "Euronews":      "https://feeds.feedburner.com/euronews/en/news",
+    "SCMP":          "https://www.scmp.com/rss/91/feed",
 }
 
 MAX_AGE_HOURS = 24
@@ -70,22 +75,23 @@ async def _fetch_feed(client: httpx.AsyncClient, name: str, url: str) -> list[di
         link = getattr(entry, "link", "") or ""
         if not link:
             continue
-        items.append(
-            {
-                "source": name,
-                "url": link,
-                "title_orig": title,
-                "summary_orig": summary,
-                "published_at": pub.isoformat() if pub else datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        items.append({
+            "source": name,
+            "url": link,
+            "title_orig": title,
+            "summary_orig": summary,
+            "published_at": pub.isoformat() if pub else datetime.now(timezone.utc).isoformat(),
+        })
     return items
 
 
 async def poll_all_sources() -> int:
     new_count = 0
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        tasks = [_fetch_feed(client, name, url) for name, url in RSS_SOURCES.items()]
+        tasks = [
+            _fetch_feed(client, name, url)
+            for name, url in ALL_RSS_SOURCES.items()
+        ]
         results = await asyncio.gather(*tasks)
 
     candidates: list[dict] = []

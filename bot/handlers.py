@@ -8,8 +8,10 @@ from db.database import (
     upsert_user, get_user, set_digest_time, set_alert_threshold,
     get_subscriptions, add_subscription, remove_subscription,
     get_recent_articles, mark_articles_viewed,
+    get_disabled_sources, toggle_source,
 )
-from bot.keyboards import topics_keyboard, settings_keyboard, main_menu
+from bot.keyboards import topics_keyboard, settings_keyboard, main_menu, sources_keyboard
+from parser.rss import ALL_RSS_SOURCES
 from bot.formatter import format_article, format_digest_header
 from parser.rss import poll_all_sources
 
@@ -26,13 +28,23 @@ HELP_TEXT = (
     "📰 Новости — свежий дайджест (только новые)\n"
     "🔄 Обновить — загрузить RSS прямо сейчас\n"
     "🗂 Темы — выбрать категории\n"
+    "📡 Источники — включить/отключить источники\n"
     "⚙️ Настройки — время дайджеста и порог уведомлений\n"
     "❓ Помощь — эта справка\n\n"
-    "Или слэш-команды: /news /topics /settings /fetch /help"
+    "Или слэш-команды: /news /topics /sources /settings /fetch /help"
 )
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+async def _get_enabled_sources(user_id: int) -> list[str] | None:
+    """Returns list of enabled sources, or None if all enabled."""
+    disabled = await get_disabled_sources(user_id)
+    if not disabled:
+        return None  # all sources enabled — no filter needed
+    all_src = list(ALL_RSS_SOURCES.keys())
+    return [s for s in all_src if s not in disabled]
+
 
 async def _send_news(message: Message) -> None:
     user_id = message.chat.id
@@ -44,12 +56,15 @@ async def _send_news(message: Message) -> None:
         )
         return
 
+    enabled_sources = await _get_enabled_sources(user_id)
     topics = subs if "all" not in subs else ["all"]
     sent_ids: list[int] = []
 
     for topic in topics:
         articles = await get_recent_articles(
-            topic, hours=24, limit=5, exclude_user_id=user_id
+            topic, hours=24, limit=5,
+            exclude_user_id=user_id,
+            enabled_sources=enabled_sources,
         )
         if not articles:
             continue
@@ -179,6 +194,19 @@ async def btn_help(message: Message) -> None:
     await message.answer(HELP_TEXT, reply_markup=main_menu())
 
 
+@router.message(Command("sources"))
+@router.message(F.text == "📡 Источники")
+async def cmd_sources(message: Message) -> None:
+    await upsert_user(message.chat.id)
+    disabled = await get_disabled_sources(message.chat.id)
+    all_src = list(ALL_RSS_SOURCES.keys())
+    await message.answer(
+        "📡 *Источники новостей*\n\nВсе источники включены по умолчанию\\.\nНажми на источник чтобы включить/отключить\\.",
+        parse_mode="MarkdownV2",
+        reply_markup=sources_keyboard(all_src, disabled),
+    )
+
+
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("topic:"))
@@ -202,6 +230,28 @@ async def cb_topics_save(call: CallbackQuery) -> None:
     else:
         await call.message.edit_text("⚠️ Нет активных подписок. Нажми 🗂 Темы")
     await call.answer("Сохранено!")
+
+
+@router.callback_query(F.data.startswith("src:"))
+async def cb_source(call: CallbackQuery) -> None:
+    source = call.data.split(":", 1)[1]
+    all_src = list(ALL_RSS_SOURCES.keys())
+    if source == "save":
+        disabled = await get_disabled_sources(call.from_user.id)
+        enabled_count = len(all_src) - len(disabled)
+        await call.message.edit_text(
+            f"✅ Сохранено: включено *{enabled_count}* из *{len(all_src)}* источников",
+            parse_mode="MarkdownV2",
+        )
+        await call.answer("Сохранено!")
+        return
+    if source not in all_src:
+        await call.answer("Неизвестный источник")
+        return
+    now_enabled = await toggle_source(call.from_user.id, source)
+    disabled = await get_disabled_sources(call.from_user.id)
+    await call.message.edit_reply_markup(reply_markup=sources_keyboard(all_src, disabled))
+    await call.answer(f"{'✅ Включён' if now_enabled else '❌ Отключён'}: {source}")
 
 
 @router.callback_query(F.data.startswith("digest_time:"))

@@ -49,6 +49,15 @@ CREATE TABLE IF NOT EXISTS user_article_views (
 )
 """
 
+# Stores DISABLED sources per user (empty = all sources enabled)
+CREATE_DISABLED_SOURCES = """
+CREATE TABLE IF NOT EXISTS user_disabled_sources (
+    user_id INTEGER,
+    source  TEXT,
+    PRIMARY KEY (user_id, source)
+)
+"""
+
 _conn: aiosqlite.Connection | None = None
 
 
@@ -67,6 +76,7 @@ async def init_db() -> None:
     await conn.execute(CREATE_USERS)
     await conn.execute(CREATE_SUBSCRIPTIONS)
     await conn.execute(CREATE_VIEWED)
+    await conn.execute(CREATE_DISABLED_SOURCES)
     # migrate: add alert_threshold if missing (existing DBs)
     try:
         await conn.execute("ALTER TABLE users ADD COLUMN alert_threshold INTEGER DEFAULT 8")
@@ -115,6 +125,7 @@ async def get_recent_articles(
     limit: int = 5,
     exclude_user_id: int | None = None,
     min_importance: int = 0,
+    enabled_sources: list[str] | None = None,
 ) -> list:
     conn = await get_conn()
 
@@ -127,29 +138,30 @@ async def get_recent_articles(
     if min_importance > 0:
         params.append(min_importance)
 
-    if exclude_user_id is not None:
-        query = f"""
-            SELECT a.* FROM articles a
-            WHERE a.processed_at >= datetime('now', ?)
-            {cat_filter}
-            {imp_filter}
-            AND a.id NOT IN (
-                SELECT article_id FROM user_article_views WHERE user_id=?
-            )
-            ORDER BY a.importance DESC, a.published_at DESC
-            LIMIT ?
-        """
-        params.append(exclude_user_id)
-    else:
-        query = f"""
-            SELECT a.* FROM articles a
-            WHERE a.processed_at >= datetime('now', ?)
-            {cat_filter}
-            {imp_filter}
-            ORDER BY a.importance DESC, a.published_at DESC
-            LIMIT ?
-        """
+    # source filter: only include enabled sources
+    src_filter = ""
+    if enabled_sources is not None:
+        if not enabled_sources:
+            return []  # all sources disabled
+        placeholders = ",".join("?" * len(enabled_sources))
+        src_filter = f"AND a.source IN ({placeholders})"
+        params.extend(enabled_sources)
 
+    view_filter = ""
+    if exclude_user_id is not None:
+        view_filter = "AND a.id NOT IN (SELECT article_id FROM user_article_views WHERE user_id=?)"
+        params.append(exclude_user_id)
+
+    query = f"""
+        SELECT a.* FROM articles a
+        WHERE a.processed_at >= datetime('now', ?)
+        {cat_filter}
+        {imp_filter}
+        {src_filter}
+        {view_filter}
+        ORDER BY a.importance DESC, a.published_at DESC
+        LIMIT ?
+    """
     params.append(limit)
     async with conn.execute(query, params) as cur:
         return await cur.fetchall()
@@ -276,3 +288,39 @@ async def get_all_subscribed_users() -> list:
         "SELECT DISTINCT u.* FROM users u JOIN subscriptions s ON s.user_id=u.chat_id"
     ) as cur:
         return await cur.fetchall()
+
+
+# ── source preferences ────────────────────────────────────────────────────────
+
+async def get_disabled_sources(user_id: int) -> list[str]:
+    """Returns list of source names the user has disabled. Empty = all enabled."""
+    conn = await get_conn()
+    async with conn.execute(
+        "SELECT source FROM user_disabled_sources WHERE user_id=?", (user_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+        return [r["source"] for r in rows]
+
+
+async def toggle_source(user_id: int, source: str) -> bool:
+    """Toggle source. Returns True if now enabled, False if now disabled."""
+    conn = await get_conn()
+    async with conn.execute(
+        "SELECT 1 FROM user_disabled_sources WHERE user_id=? AND source=?",
+        (user_id, source),
+    ) as cur:
+        exists = await cur.fetchone()
+    if exists:
+        await conn.execute(
+            "DELETE FROM user_disabled_sources WHERE user_id=? AND source=?",
+            (user_id, source),
+        )
+        await conn.commit()
+        return True  # now enabled
+    else:
+        await conn.execute(
+            "INSERT OR IGNORE INTO user_disabled_sources (user_id, source) VALUES (?,?)",
+            (user_id, source),
+        )
+        await conn.commit()
+        return False  # now disabled
