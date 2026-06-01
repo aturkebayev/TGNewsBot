@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS user_article_views (
 )
 """
 
+# Tracks articles that were shown to the user via manual "📰 Новости" request.
+# Kept separate from user_article_views (push/digest tracking) so that
+# one user's manual reads never affect another user's ability to see the same articles.
+CREATE_MANUAL_READS = """
+CREATE TABLE IF NOT EXISTS user_manual_reads (
+    user_id INTEGER,
+    article_id INTEGER,
+    read_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, article_id)
+)
+"""
+
 # Stores DISABLED sources per user (empty = all sources enabled)
 CREATE_DISABLED_SOURCES = """
 CREATE TABLE IF NOT EXISTS user_disabled_sources (
@@ -76,6 +88,7 @@ async def init_db() -> None:
     await conn.execute(CREATE_USERS)
     await conn.execute(CREATE_SUBSCRIPTIONS)
     await conn.execute(CREATE_VIEWED)
+    await conn.execute(CREATE_MANUAL_READS)
     await conn.execute(CREATE_DISABLED_SOURCES)
     # migrate: add alert_threshold if missing (existing DBs)
     try:
@@ -126,7 +139,14 @@ async def get_recent_articles(
     exclude_user_id: int | None = None,
     min_importance: int = 0,
     enabled_sources: list[str] | None = None,
+    manual_reads: bool = False,
 ) -> list:
+    """Fetch recent articles.
+
+    exclude_user_id — skip articles already seen by this user.
+    manual_reads=True  → checks user_manual_reads (ручной запрос новостей)
+    manual_reads=False → checks user_article_views (push/дайджест, по умолчанию)
+    """
     conn = await get_conn()
 
     cat_filter = "" if topic == "all" else "AND a.category=?"
@@ -149,7 +169,8 @@ async def get_recent_articles(
 
     view_filter = ""
     if exclude_user_id is not None:
-        view_filter = "AND a.id NOT IN (SELECT article_id FROM user_article_views WHERE user_id=?)"
+        view_table = "user_manual_reads" if manual_reads else "user_article_views"
+        view_filter = f"AND a.id NOT IN (SELECT article_id FROM {view_table} WHERE user_id=?)"
         params.append(exclude_user_id)
 
     query = f"""
@@ -168,11 +189,28 @@ async def get_recent_articles(
 
 
 async def mark_articles_viewed(user_id: int, article_ids: list[int]) -> None:
+    """Mark articles as seen via push/digest (used by scheduler only)."""
     if not article_ids:
         return
     conn = await get_conn()
     await conn.executemany(
         "INSERT OR IGNORE INTO user_article_views (user_id, article_id) VALUES (?, ?)",
+        [(user_id, aid) for aid in article_ids],
+    )
+    await conn.commit()
+
+
+async def mark_manually_read(user_id: int, article_ids: list[int]) -> None:
+    """Mark articles as manually read by the user (used by the 📰 Новости handler).
+
+    Stored separately from push views so that one user's manual reads
+    never block another user from seeing the same articles.
+    """
+    if not article_ids:
+        return
+    conn = await get_conn()
+    await conn.executemany(
+        "INSERT OR IGNORE INTO user_manual_reads (user_id, article_id) VALUES (?, ?)",
         [(user_id, aid) for aid in article_ids],
     )
     await conn.commit()

@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery
 from db.database import (
     upsert_user, get_user, set_digest_time, set_alert_threshold,
     get_subscriptions, add_subscription, remove_subscription,
-    get_recent_articles, mark_articles_viewed,
+    get_recent_articles, mark_manually_read,
     get_disabled_sources, toggle_source,
 )
 from bot.keyboards import topics_keyboard, settings_keyboard, main_menu, sources_keyboard
@@ -61,10 +61,14 @@ async def _send_news(message: Message) -> None:
     sent_ids: list[int] = []
 
     for topic in topics:
+        # manual_reads=True: exclude only articles THIS user has manually read before.
+        # Articles received via push/digest (user_article_views) are NOT excluded,
+        # so one user's push history never blocks another user from seeing the same news.
         articles = await get_recent_articles(
             topic, hours=24, limit=5,
             exclude_user_id=user_id,
             enabled_sources=enabled_sources,
+            manual_reads=True,
         )
         if not articles:
             continue
@@ -82,7 +86,9 @@ async def _send_news(message: Message) -> None:
             except Exception:
                 pass
 
-    await mark_articles_viewed(user_id, sent_ids)
+    # Track only what THIS user manually read — stored in user_manual_reads,
+    # completely isolated from other users' read history.
+    await mark_manually_read(user_id, sent_ids)
 
     if not sent_ids:
         await message.answer(
