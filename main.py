@@ -14,7 +14,7 @@ from parser.rss import poll_all_sources
 load_dotenv()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-TIMEZONE  = os.getenv("TIMEZONE", "Europe/Moscow")
+TIMEZONE  = os.getenv("TIMEZONE", "Asia/Almaty")
 DATA_DIR  = os.getenv("DATA_DIR", ".")
 
 # logs go into DATA_DIR so they land on the persistent volume when hosted

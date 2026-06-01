@@ -56,15 +56,38 @@ def format_article(row) -> str:
     )
 
 
+TOPIC_RU = {
+    "politics": "Политика",
+    "tech":     "Технологии",
+    "sport":    "Спорт",
+    "economy":  "Экономика",
+    "science":  "Наука",
+    "all":      "Все темы",
+    "other":    "Прочее",
+}
+
+
 def format_digest_header(topic: str, count: int) -> str:
     emoji = CATEGORY_EMOJI.get(topic, "📌")
-    topic_ru = {
-        "politics": "Политика",
-        "tech":     "Технологии",
-        "sport":    "Спорт",
-        "economy":  "Экономика",
-        "science":  "Наука",
-        "all":      "Все темы",
-        "other":    "Прочее",
-    }.get(topic, topic)
+    topic_ru = TOPIC_RU.get(topic, topic)
     return f"{emoji} *{escape(topic_ru)}* — топ {count} новостей за 24 часа"
+
+
+def format_digest_compact(topic: str, articles: list) -> str:
+    """Compact digest: topic header + one headline per article (no summaries).
+
+    Used by the scheduled digest job for importance-5–8 articles.
+    Breaking news (importance 9+) is sent separately as full articles.
+    """
+    emoji = CATEGORY_EMOJI.get(topic, "📌")
+    topic_ru = TOPIC_RU.get(topic, topic)
+    header = f"📋 {emoji} *{escape(topic_ru)}*"
+    lines = [header, ""]
+    for art in articles:
+        title = escape(art["title_ru"] or art["title_orig"] or "")
+        url = art["url"] or ""
+        imp = art["importance"] or 5
+        # Show importance badge for higher-importance articles
+        badge = "🔸" if imp >= 7 else "🔹"
+        lines.append(f"{badge} [{title}]({url})")
+    return "\n".join(lines)

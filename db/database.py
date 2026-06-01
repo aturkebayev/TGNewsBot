@@ -138,12 +138,14 @@ async def get_recent_articles(
     limit: int = 5,
     exclude_user_id: int | None = None,
     min_importance: int = 0,
+    max_importance: int | None = None,
     enabled_sources: list[str] | None = None,
     manual_reads: bool = False,
 ) -> list:
     """Fetch recent articles.
 
     exclude_user_id — skip articles already seen by this user.
+    min_importance / max_importance — filter by importance score (1–10).
     manual_reads=True  → checks user_manual_reads (ручной запрос новостей)
     manual_reads=False → checks user_article_views (push/дайджест, по умолчанию)
     """
@@ -151,12 +153,15 @@ async def get_recent_articles(
 
     cat_filter = "" if topic == "all" else "AND a.category=?"
     imp_filter = "" if min_importance == 0 else "AND a.importance>=?"
+    max_filter = "" if max_importance is None else "AND a.importance<=?"
     params: list = [f"-{hours} hours"]
 
     if topic != "all":
         params.append(topic)
     if min_importance > 0:
         params.append(min_importance)
+    if max_importance is not None:
+        params.append(max_importance)
 
     # source filter: only include enabled sources
     src_filter = ""
@@ -178,6 +183,7 @@ async def get_recent_articles(
         WHERE a.processed_at >= datetime('now', ?)
         {cat_filter}
         {imp_filter}
+        {max_filter}
         {src_filter}
         {view_filter}
         ORDER BY a.importance DESC, a.published_at DESC
@@ -203,15 +209,23 @@ async def mark_articles_viewed(user_id: int, article_ids: list[int]) -> None:
 async def mark_manually_read(user_id: int, article_ids: list[int]) -> None:
     """Mark articles as manually read by the user (used by the 📰 Новости handler).
 
-    Stored separately from push views so that one user's manual reads
-    never block another user from seeing the same articles.
+    Writes to BOTH tables:
+    - user_manual_reads  → prevents showing the same article again in manual requests
+    - user_article_views → prevents the digest/alert scheduler from re-sending articles
+                          the user has already read manually (Bug-1 fix)
+    Each table is scoped per user, so one user's reads never affect another's.
     """
     if not article_ids:
         return
     conn = await get_conn()
+    pairs = [(user_id, aid) for aid in article_ids]
     await conn.executemany(
         "INSERT OR IGNORE INTO user_manual_reads (user_id, article_id) VALUES (?, ?)",
-        [(user_id, aid) for aid in article_ids],
+        pairs,
+    )
+    await conn.executemany(
+        "INSERT OR IGNORE INTO user_article_views (user_id, article_id) VALUES (?, ?)",
+        pairs,
     )
     await conn.commit()
 
